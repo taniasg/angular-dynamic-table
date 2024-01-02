@@ -1,0 +1,15 @@
+<!-- Tabla de Resultados de carga -->
+<div class="table-responsive col-md-12 py-2 px-4">
+    <app-table 
+        [columns]="columns" 
+        [data]="logs"
+        [actions]="_actions"
+        [showTooltip]="false"
+        [isPageable]="true"
+        [type]="type"
+        [totalItems]="totalItems"
+        [clearSelection]="clearSelection"
+        (paginator)="onPaginatorChange($event)"
+        (action)="actionSelected($event)">
+    </app-table>
+</div>

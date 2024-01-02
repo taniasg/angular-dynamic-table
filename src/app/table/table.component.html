@@ -1,0 +1,414 @@
+<div class="row mb-2">
+	<form class="form-inline col-md-4 col-sm-12 m-0 p-0" style="margin: 0!important;">
+		<!-- Acciones -->
+		<ng-container *ngIf="showActions">
+			<div class="form-group row mx-sm-3 ml-0" style="margin-left: 0!important;">
+				<mat-form-field  
+					class="form-group col-md-12 col-sm-12"
+					
+				>
+					<mat-label  
+						color="secondary">
+						Acciones
+					</mat-label>
+					<mat-select 
+						[(ngModel)]="acciones"
+						[ngModelOptions]="{standalone: true}"
+						placeholder="Selecciona una opción" 
+					>
+						<mat-option value="">Selecciona una opción</mat-option>
+						<mat-option value="activate_batch" *ngIf="actions.activate">Activar {{type}}</mat-option>
+						<mat-option value="inactivate_batch" *ngIf="actions.inactivate">Inactivar {{type}}</mat-option>
+						<mat-option value="download_guide_batch" *ngIf="actions.download_guide">Descargar layouts</mat-option>
+						<mat-option value="download_batch" *ngIf="actions.download">Descargar {{type}}</mat-option>
+					</mat-select>
+				</mat-form-field>
+			</div>
+			<!-- <span class="msg" *ngIf="selection.selected.length < 2; else aplicar">(Esta opción se activa al seleccionar 2 o más {{type}})</span> -->
+			<ng-container *ngIf="showTooltip; else aplicar">
+				<span class="material-icons orange fs-20 pointer" matTooltip="(Esta opción se activa al seleccionar 1 o más registros)" *ngIf="selection.selected.length < 1; else aplicar">info</span>
+			</ng-container>
+			<ng-template #aplicar>
+				<button 
+					mat-flat-button 
+					color="primary" 
+					type="button"
+					class="sm"
+					[disabled]="!acciones || dataSource.data.length === 0"
+					(click)="actionSelected(acciones, selection.selected)">
+					Aplicar
+				</button>
+			</ng-template>
+		</ng-container>
+
+        <ng-container *ngIf="trackingBoard">
+            <button mat-flat-button class="primary mx-4 my-3" (click)="actionSelected('trackingBoard', null)" type="button">
+                Tablero de seguimiento
+            </button>
+        </ng-container>
+
+        <ng-container *ngIf="download">
+            <button mat-flat-button class="primary mx-4 my-3" (click)="actionSelected('download', null)" type="button" [disabled]="!enableDownload">
+                Descargar
+            </button>
+        </ng-container>
+        
+	</form>
+
+	<div class="col-md-8 col-sm-12 d-flex justify-content-end">
+		<mat-paginator 
+			*ngIf="isPageable"
+			color="primary"
+			[pageSizeOptions]="pageSizeOptions" 
+			(page)="getPaginatorData($event)"
+			[pageSize]="pageSize" 
+			[length]="length" 
+			showFirstLastButtons>
+		</mat-paginator>  
+	</div>
+	
+
+</div>
+
+<div class="table-container" [style.width]="maxWidth" [style.max-height]="maxHeight">
+	<table mat-table [dataSource]="dataSource" matSort (matSortChange)="sortData($event)" class="parent" multiTemplateDataRows>
+	
+		<ng-container [matColumnDef]="column.key" *ngFor="let column of _columns; let i = index">
+			<!-- Select -->
+			<ng-container *ngIf="column.isSelect">
+				<th mat-header-cell *matHeaderCellDef class="align-items-center">
+					<mat-checkbox color="primary"
+                                    (click)="$event.preventDefault(); masterToggle()"
+									[checked]="isChecked"
+									[indeterminate]="isSomeSelected">
+					</mat-checkbox>
+				</th>
+				<td mat-cell *matCellDef="let row">
+					<mat-checkbox color="primary"
+									(click)="$event.stopPropagation()"
+									(change)="$event ? toggleSelectRow(row) : null"
+									[checked]="isSelected(row)">
+					</mat-checkbox>
+				</td>
+			</ng-container>
+
+			<!-- Expandible -->
+			<ng-container *ngIf="column.isExpandable">
+				<th mat-header-cell *matHeaderCellDef class="align-items-center">
+				</th>
+				<td mat-cell *matCellDef="let element" class="align-items-center" style="text-align: center;">
+					<div *ngIf="element.items && element.items?.data.length > 0" [ngClass]="_expandableRows ? 'row-'+i : ''">
+						<button
+							*ngIf="!element.expanded"
+							mat-icon-button
+							(click)="toggleRow(element)"
+							>
+							<span class="material-icons">add</span>
+						</button>
+						<button
+							*ngIf="element.expanded"
+							mat-icon-button
+							(click)="toggleRow(element)"
+							>
+							<span class="material-icons">remove</span>
+						</button>
+					</div>
+				</td>
+			</ng-container>
+
+			<!-- Progreso -->
+			<ng-container *ngIf="column.progress">
+				<th mat-header-cell *matHeaderCellDef mat-sort-header> {{column.label }} </th>
+				<td mat-cell *matCellDef="let element">
+					<span class="percentage">{{element[column.key]}}%</span>
+					<mat-progress-bar 
+						mode="determinate" 
+						[value]="element[column.key]" 
+						[class.success]="element[column.key] === 100 && element.resultados === 'Carga exitosa'"
+						[class.error]="element[column.key] === 100 && element.resultados === 'Carga no exitosa'">
+					</mat-progress-bar>
+				</td>
+			</ng-container>
+
+            <ng-container *ngIf="column.semaphore">
+                <th mat-header-cell *matHeaderCellDef> {{column.label }} </th>
+                <td mat-cell *matCellDef="let element">
+                    <div class="semaphore-light" [ngClass]="{
+                        'green': element.estatusEntrega === 'Entregado',
+                        'yellow': element.estatusEntrega === 'Entregado en prorroga',
+                        'blue': element.estatusEntrega === 'Pendiente',
+                        'orange': element.estatusEntrega === 'Extemporáneo', 
+                        'red': element.estatusEntrega === 'No entregado',
+                        'purple': element.estatusEntrega === 'Prórroga Ext'
+                    }">
+                    </div>
+                </td>
+            </ng-container>
+
+			<!-- Layout -->
+			<ng-container *ngIf="column.isLayout">
+				<th mat-header-cell *matHeaderCellDef mat-sort-header> {{ column.label }} </th>
+				<td mat-cell *matCellDef="let element">
+					<div *ngIf="canCreateLayout(element); else label">
+						<button 
+							(click)="openLayoutDialog(element)"
+							mat-flat-button 
+							class="primary my-2"
+							style="font-size: 14px; height: inherit; min-width: inherit;">
+							Crear layout
+						</button>
+					</div>
+					<ng-template #label>
+						{{ element[column.key] }}
+					</ng-template>
+				</td>
+			</ng-container>
+	
+			<!-- Datos -->
+
+			<!-- Con Ordenamiento -->
+			<ng-container *ngIf="column.isData">
+				<!-- Con ordenamiento -->
+				<ng-container *ngIf="column.canSort; else cannotSort">
+					<th mat-header-cell *matHeaderCellDef mat-sort-header> {{ column.label }} </th>
+				</ng-container>
+				<!-- Sin ordenamiento -->
+				<ng-template #cannotSort>
+					<th mat-header-cell *matHeaderCellDef> {{ column.label }} </th>
+				</ng-template>
+				<td mat-cell *matCellDef="let element" > 
+					<div [ngClass]="_expandableRows ? 'row-'+i : ''">
+						{{element[column.key]}} 
+					</div>
+				</td>
+			</ng-container>
+	
+		 	<!-- Acciones -->
+			<ng-container *ngIf="column.actions">
+				<th mat-header-cell *matHeaderCellDef> {{column.label}} </th>
+	
+				<td mat-cell *matCellDef="let element" [ngClass]="_expandableRows ? 'row-'+i : ''">
+					<div class="actions-container">
+						<!-- Activar/Inactivar -->
+						<mat-slide-toggle 
+							color="accent"
+							[checked]="element.estatus"
+							*ngIf="column.actions.toggle"
+							(click)="actionSelected(element.estatus ? 'inactivate' : 'activate', element)"
+						>
+						</mat-slide-toggle>
+						<!-- Modificar -->
+						<button 
+							mat-mini-fab 
+							color="primary" 
+							*ngIf="column.actions.edit" 
+							[disabled]="!element.estatus"
+							(click)="actionSelected('edit', element, element.estatus)"
+							class="edit">
+							<span class="material-icons-outlined fs-20"
+							[ngClass]="{'white' : element.estatus }">create</span>
+						</button>
+						<!-- Detalle -->
+						<button
+							mat-icon-button
+							*ngIf="column.actions.view"
+							(click)="actionSelected('view', element)">
+							<span 
+								class="material-icons-outlined gray" 
+							>
+								visibility
+							</span>
+						</button>
+						<!-- Descargar -->
+						<button 
+							mat-mini-fab 
+							color="primary" 
+							*ngIf="column.actions.download && showAction('download', element.estatusProcesamiento); else div30" 
+							(click)="actionSelected('download', element)"
+							class="download">
+							<span class="material-icons-outlined fs-20 white">save_alt</span>
+						</button>
+
+						<ng-template #div30>
+							<div style="padding: 19px;" *ngIf="column.actions.download"></div>
+						</ng-template>
+						<!-- Comentarios -->
+						<button 
+							mat-mini-fab 
+							color="primary" 
+							*ngIf="column.actions.comments && showAction('comments', element.estatusProcesamiento) && element.comentarios; else div30" 
+							(click)="actionSelected('comments', element)"
+							class="comments">
+							<span class="material-icons-outlined fs-20 white">comment</span>
+						</button>
+						<ng-template #div30>
+							<div style="padding: 19px;" *ngIf="column.actions.comments"></div>
+						</ng-template>
+                        <!-- Prorroga -->
+						<button 
+                            mat-mini-fab 
+                            color="primary" 
+                            *ngIf="column.actions.extension && element.aplica_prorroga" 
+                            (click)="actionSelected('extension', element, element.estatus)"
+                            class="extension">
+                            <span class="material-icons-outlined fs-20 white d-flex">schedule</span>
+                        </button>
+						<!-- Descarga de archivos de errores -->
+						<button 
+							mat-mini-fab 
+							color="primary" 
+							*ngIf="column.actions.report_download && showAction('report_download', element.estatusProcesamiento, element); else div30" 
+							(click)="actionSelected('report_download', element)"
+							class="report_download">
+							<span class="material-icons-outlined fs-20 white">assignment</span>
+						</button>
+						<ng-template #div30>
+							<div style="padding: 19px;" *ngIf="column.actions.report_download"></div>
+						</ng-template>
+						<!-- Panel -->
+						<button 
+							mat-mini-fab 
+							color="primary" 
+							*ngIf="column.actions.panel && showAction('panel', element.layoutsContenidos)" 
+							(click)="actionSelected('panel', element)"
+							class="comments">
+							<span class="material-icons-outlined fs-20 white">space_dashboard</span>
+						</button>
+						<span 
+							class="material-icons-outlined red" 
+							*ngIf="column.actions.remove"
+							(click)="actionSelected('remove', element)"
+						>
+							remove_circle
+						</span>
+						<!-- Listado de Carga de informacion -->
+						<button 
+							mat-mini-fab 
+							color="primary" 
+							*ngIf="column.actions.info_load && showAction('info_load', element.estatusProcesamiento); else div30" 
+							(click)="redirect('/procesos/carga')"
+							class="info_load">
+							<span class="material-icons-outlined fs-20 white">arrow_forward</span>
+						</button>
+						<ng-template #div30>
+							<div style="padding: 19px;" *ngIf="column.actions.info_load"></div>
+						</ng-template>
+						<!-- Ver resultados (Resultados de carga)-->
+						<button 
+							mat-mini-fab 
+							color="primary"
+							class="results"
+							[disabled]="element.resultados !== 'Carga exitosa'"
+							(click)="redirect('/procesos/resultados', element)"
+							*ngIf="column.actions.results && element.resultados === 'Carga exitosa'">
+							<span class="material-icons-outlined fs-20 white">arrow_right_alt</span>
+						</button>
+					</div>
+				</td>
+			</ng-container>
+
+		</ng-container>
+
+		<!-- Template de expansion -->
+		<ng-container matColumnDef="expandedDetail">
+			<td mat-cell *matCellDef="let element; let indexElement = index" [attr.colspan]="displayedColumns.length" style="padding: 0px!important;">
+				<div class="example-element-detail" *ngIf="element.items" [@detailExpand]="element == expandedElement ? 'expanded' : 'collapsed'">
+					<div class="inner-table" *ngIf="element.expanded">
+						<table class="items" #innerTables mat-table #innerSort="matSort" [dataSource]="element.items" matSort>
+							<ng-container [matColumnDef]="innerColumn.key" *ngFor="let innerColumn of _columns; let i = index">
+								<!-- Datos -->
+								<ng-container *ngIf="!innerColumn.actions">
+									<th mat-header-cell *matHeaderCellDef style="height: 0px;"> {{innerColumn.label}} </th>
+									<td mat-cell *matCellDef="let element">
+										<div [ngClass]="_expandableRows ? 'row-'+i : ''">
+											{{element[innerColumn.key]}}
+										</div> 
+									</td>
+								</ng-container>
+
+									<!-- Acciones -->
+									<ng-container *ngIf="innerColumn.actions">	
+										<th mat-header-cell *matHeaderCellDef > {{innerColumn.label}} </th>
+										<td mat-cell *matCellDef="let element" [ngClass]="_expandableRows ? 'row-'+i : ''">
+											<div class="actions-container">
+												<!-- Descargar -->
+												<button 
+													mat-mini-fab 
+													color="primary" 
+													*ngIf="innerColumn.actions.download && showAction('download', element.estatusProcesamiento); else div30" 
+													(click)="actionSelected('download', element)"
+													class="download">
+													<span class="material-icons-outlined fs-20 white">save_alt</span>
+												</button>
+												<ng-template #div30>
+													<div style="padding: 19px;" *ngIf="innerColumn.actions.download"></div>
+												</ng-template>
+												<!-- Comentarios -->
+												<button 
+													mat-mini-fab 
+													color="primary" 
+													*ngIf="innerColumn.actions.comments && showAction('comments', element.estatusProcesamiento) && element.comentarios; else div30" 
+													(click)="actionSelected('comments', element)"
+													class="comments">
+													<span class="material-icons-outlined fs-20 white">comment</span>
+												</button>
+												<ng-template #div30>
+													<div style="padding: 19px;" *ngIf="innerColumn.actions.comments"></div>
+												</ng-template>
+												<!-- Descarga de archivos de errores -->
+												<button 
+													mat-mini-fab 
+													color="primary" 
+													*ngIf="innerColumn.actions.report_download && showAction('report_download', element.estatusProcesamiento, element); else div30" 
+													(click)="actionSelected('report_download', element)"
+													class="report_download">
+													<span class="material-icons-outlined fs-20 white">assignment</span>
+												</button>
+
+												<ng-template #div30>
+													<div style="padding: 19px;" *ngIf="innerColumn.actions.report_download"></div>
+												</ng-template>
+												<!-- Listado de Carga de informacion -->
+												<button 
+													mat-mini-fab 
+													color="primary" 
+													*ngIf="innerColumn.actions.info_load && showAction('info_load', element.estatusProcesamiento); else div30" 
+													(click)="redirect('/procesos/carga')"
+													class="info_load">
+													<span class="material-icons-outlined fs-20 white">arrow_forward</span>
+												</button>
+
+												<ng-template #div30>
+													<div style="padding: 19px;" *ngIf="innerColumn.actions.info_load"></div>
+												</ng-template>
+												
+											</div>
+										</td>
+									</ng-container>
+							</ng-container>
+							<tr mat-header-row *matHeaderRowDef="displayedColumns" style="visibility: hidden; height: 0px; position: absolute;"></tr>
+							<tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+						</table>
+					</div>
+				</div>
+			</td>
+		</ng-container>
+
+		<!-- HEADER DE TABLA -->
+		<tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true;"></tr>
+
+		<!-- ROW DE DATOS -->
+		<tr mat-row *matRowDef="let element; columns: displayedColumns; let i= dataIndex" [class.odd]="i % 2 == 0" [class.pointer]="canSelectRow" (click)="onSelectedRow(element)" [class.selected]="row === element">
+		</tr>
+
+		<!-- ROW DE DETALLE (EXPANDED DETAIL) -->
+		<tr mat-row *matRowDef="let row; columns: ['expandedDetail']; let i=dataIndex" class="example-detail-row" [class.odd]="i % 2 == 0"></tr>
+		
+		<tr class="mat-row" *matNoDataRow>
+			<td class="mat-cell noData" [attr.colspan]="displayedColumns.length">{{noData}}</td>
+		</tr> 
+	
+	</table>
+
+</div>
+
